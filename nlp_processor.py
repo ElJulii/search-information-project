@@ -2,65 +2,70 @@ import os
 import spacy
 from bs4 import BeautifulSoup
 
-# Cargar modelo en inglés
 nlp = spacy.load("en_core_web_sm")
 
 PAGES_FOLDER = "pages"
 OUTPUT_FOLDER = "output"
+TOKENS_FOLDER = os.path.join(OUTPUT_FOLDER, "tokens")
+LEMMAS_FOLDER = os.path.join(OUTPUT_FOLDER, "lemmas")
 
-# Crear carpeta output si no existe
-if not os.path.exists(OUTPUT_FOLDER):
-    os.makedirs(OUTPUT_FOLDER)
+# Crear carpetas si no existen
+os.makedirs(TOKENS_FOLDER, exist_ok=True)
+os.makedirs(LEMMAS_FOLDER, exist_ok=True)
 
-all_tokens = set()
-lemma_dict = {}
+print("Procesando archivos individualmente...")
 
-print("Procesando archivos...")
-
-# Leer todos los archivos HTML
+# Procesar cada archivo de pages
 for filename in os.listdir(PAGES_FOLDER):
-    filepath = os.path.join(PAGES_FOLDER, filename)
 
-    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+    page_path = os.path.join(PAGES_FOLDER, filename)
+
+    # Leer HTML
+    with open(page_path, "r", encoding="utf-8", errors="ignore") as f:
         html = f.read()
 
-        # Quitar HTML
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text(separator=" ")
+    # Quitar etiquetas HTML
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(separator=" ")
 
-        # Procesar con spaCy
-        doc = nlp(text.lower())
+    doc = nlp(text.lower())
 
-        for token in doc:
-            # Filtrar basura
-            if (
-                token.is_alpha and              # solo letras
-                not token.is_stop and           # no stopwords
-                not token.is_punct and          # no puntuación
-                len(token.text) > 2             # evitar palabras muy cortas
-            ):
-                word = token.text
-                lemma = token.lemma_
+    tokens_set = set()
+    lemma_dict = {}
 
-                # Agregar token único
-                all_tokens.add(word)
+    for token in doc:
+        if (
+            token.is_alpha and
+            not token.is_stop and
+            not token.is_punct and
+            len(token.text) > 2
+        ):
+            word = token.text
+            lemma = token.lemma_
 
-                # Agrupar por lemma
-                if lemma not in lemma_dict:
-                    lemma_dict[lemma] = set()
+            tokens_set.add(word)
 
-                lemma_dict[lemma].add(word)
+            if lemma not in lemma_dict:
+                lemma_dict[lemma] = set()
 
-# Guardar tokens.txt
-with open(os.path.join(OUTPUT_FOLDER, "tokens.txt"), "w", encoding="utf-8") as f:
-    for token in sorted(all_tokens):
-        f.write(token + "\n")
+            lemma_dict[lemma].add(word)
 
-# Guardar lemmas.txt
-with open(os.path.join(OUTPUT_FOLDER, "lemmas.txt"), "w", encoding="utf-8") as f:
-    for lemma in sorted(lemma_dict.keys()):
-        tokens_list = " ".join(sorted(lemma_dict[lemma]))
-        f.write(f"{lemma} {tokens_list}\n")
+    # Nombre base sin extensión
+    base_name = os.path.splitext(filename)[0]
+
+    # Guardar tokens del archivo
+    tokens_output_path = os.path.join(TOKENS_FOLDER, f"token_{base_name}.txt")
+    with open(tokens_output_path, "w", encoding="utf-8") as f:
+        for token in sorted(tokens_set):
+            f.write(token + "\n")
+
+    # Guardar lemmas del archivo
+    lemmas_output_path = os.path.join(LEMMAS_FOLDER, f"lemma_{base_name}.txt")
+    with open(lemmas_output_path, "w", encoding="utf-8") as f:
+        for lemma in sorted(lemma_dict.keys()):
+            tokens_line = " ".join(sorted(lemma_dict[lemma]))
+            f.write(f"{lemma} {tokens_line}\n")
+
+    print(f"Procesado: {filename}")
 
 print("Proceso terminado.")
-print("Archivos generados en carpeta 'output'.")
